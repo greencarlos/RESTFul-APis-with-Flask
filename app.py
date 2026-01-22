@@ -50,6 +50,7 @@ class Pet(Base):
         "User", secondary=user_pet, back_populates="pets"
     )
 
+
 class UserSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = User
@@ -59,18 +60,117 @@ class PetSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Pet
 
-@app.route('/users', methods=['POST'])
+
+# --- --- --- POSTS --- --- ---
+
+
+@app.route("/users", methods=["POST"])
 def create_user():
     try:
         user_data = user_schema.load(request.json)
-    execpt ValidationError as e:
+    except ValidationError as e:
         return jsonify(e.messages), 400
 
-    new_user = User(name=user_data['name'], email=user_data['email'])
+    new_user = User(name=user_data["name"], email=user_data["email"])
     db.session.add(new_user)
     db.session.commit()
 
-    return user_schema
+    return user_schema.jsonify(new_user), 201
+
+
+@app.route("/pets", methods=["POST"])
+def create_pet():
+    try:
+        pet_data = pet_schema.load(request.json)
+    except ValidationError as e:
+        return jsonify(e.messages), 400
+
+    new_pet = Pet(name=pet_data["name"], animal=pet_data["animal"])
+    db.session.add(new_pet)
+    db.session.commit()
+
+    return pet_schema.jsonify(new_pet), 201
+
+
+@app.route("/users/<int:user_id>/add_pets", methods=["POST"])
+def add_pets(user_id):
+    user = db.session.get(User, user_id)
+    pet_data = request.json
+
+    for id in pet_data["pet_ids"]:
+        pet = db.session.get(Pet, id)
+        user.pets.append(pet)
+        db.session.commit()
+
+    return jsonify({"message": "All pets added!"}), 200
+
+
+# --- --- --- GETS --- --- ---
+
+
+@app.route("/users", methods=["GET"])
+def get_users():
+    query = select(User)
+    users = db.session.execute(query).scalars().all()
+
+    return users_schema.jsonify(users), 200
+
+
+@app.route("/users/<int:id>", methods=["GET"])
+def get_user(id):
+    user = db.session.get(User, id)
+    return user_schema.jsonify(user), 200
+
+
+@app.route("/users/<int:user_id>/add_pet/<int:pet_id>", methods=["GET"])
+def adopt_pet(user_id, pet_id):
+    user = db.session.get(User, user_id)
+    pet = db.session.get(Pet, pet_id)
+
+    users.pets.append(pet)
+    db.sesion.commit()
+    return (
+        jsonify({"message": f"{user.name} adopted the {pet.animal}, {pet.name}!"}),
+        200,
+    )
+
+
+# --- --- --- PUTS --- --- ---
+
+
+@app.route("/users/<int:id>", methods=["PUT"])
+def update_user(id):
+    user = db.session.get(User, id)
+
+    if not user:
+        return jsonify({"message": "Invalid user id"}), 400
+
+    try:
+        user_data = user_schema.load(request.json)
+    except ValidationError as e:
+        return jsonify(e.messages), 400
+
+    user.name = user_data["name"]
+    user.email = user_data["email"]
+
+    db.session.commit()
+    return user_schema.jsonify(user), 200
+
+
+# --- --- --- DELETES --- --- ---
+
+
+@app.route("/users/<int:id>", methods=["DELETE"])
+def delete_user(id):
+    user = db.session.get(User, id)
+
+    if not user:
+        return jsonify({"message": "Invalid user id"}), 400
+
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({"message": f"successfully deleted user {id}"}), 200
+
 
 user_schema = UserSchema()
 users_schema = UserSchema(many=True)
